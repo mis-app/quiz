@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cerebro Activo - Edición Servidor</title>
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --success: #10b981;
+            --danger: #ef4444;
+            --card: #ffffff;
+            --text: #1e293b;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; }
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: var(--card);
+            width: 100%;
+            max-width: 550px;
+            border-radius: 24px;
+            padding: 40px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .screen { display: none; text-align: center; animation: fadeIn 0.5s ease; }
+        .screen.active { display: block; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        h1 { color: var(--primary-dark); margin-bottom: 15px; }
+        
+        .input-group { margin-bottom: 20px; text-align: left; }
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 1rem;
+            margin-top: 5px;
+        }
+
+        .btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 14px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 12px;
+            transition: 0.2s;
+        }
+
+        .btn:hover { background: var(--primary-dark); transform: translateY(-2px); }
+
+        .option {
+            background: #f8fafc;
+            text-align: left;
+            padding: 16px;
+            margin-bottom: 12px;
+            border-radius: 12px;
+            cursor: pointer;
+            border: 2px solid #e2e8f0;
+            transition: 0.2s;
+        }
+
+        .option:hover { border-color: var(--primary); background: #f1f5f9; }
+        .option.correct { background: var(--success); color: white; border-color: var(--success); }
+        .option.wrong { background: var(--danger); color: white; border-color: var(--danger); }
+
+        .stats { display: flex; justify-content: space-between; margin-bottom: 20px; font-weight: bold; }
+        .progress-bg { height: 10px; background: #e2e8f0; border-radius: 5px; margin-bottom: 20px; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--primary); width: 0%; transition: 0.4s; }
+
+        /* Estilos del Panel de Profesor Oculto */
+        #profesor-panel {
+            display: none;
+            background: #f1f5f9;
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            border: 1px solid #cbd5e1;
+        }
+
+        .badge-prof {
+            font-size: 0.7rem;
+            background: #64748b;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- Pantalla de Bienvenida -->
+    <div id="start-screen" class="screen active">
+        <!-- Truco: Haz doble clic en el escudo para abrir el panel de carga -->
+        <div style="font-size: 3rem; margin-bottom: 10px; cursor: help;" ondblclick="toggleProfesorPanel()">🛡️</div>
+        <h1>Quiz de Competencias</h1>
+        <p>Demuestra tus conocimientos digitales. Escribe tu nombre para empezar.</p>
+        
+        <!-- Panel oculto para el profesor -->
+        <div id="profesor-panel">
+            <p style="font-size: 0.8rem; font-weight: bold; color: #475569; margin-bottom: 10px;">
+                MODO PROFESOR <span class="badge-prof">ADMIN</span>
+            </p>
+            <input type="file" id="file-input" accept=".csv" style="display:none">
+            <button class="btn" style="background: #475569; font-size: 0.9rem;" onclick="document.getElementById('file-input').click()">
+                📁 Actualizar Banco de Preguntas (CSV)
+            </button>
+            <p id="status-text" style="font-size: 0.75rem; margin-top: 5px;">Usando preguntas internas.</p>
+        </div>
+
+        <div class="input-group">
+            <label>Tu Nombre Completo:</label>
+            <input type="text" id="player-name" placeholder="Ej: Álex García">
+        </div>
+
+        <button class="btn" onclick="checkStart()">¡Comenzar Desafío!</button>
+    </div>
+
+    <!-- Pantalla de Juego -->
+    <div id="game-screen" class="screen">
+        <div class="stats">
+            <span>⭐ Puntos: <span id="score-val">0</span></span>
+            <span>⏱️ <span id="timer-val">15</span>s</span>
+        </div>
+        <div class="progress-bg">
+            <div id="progress-fill" class="progress-fill"></div>
+        </div>
+        <h2 id="question-text" style="margin-bottom: 20px; font-size: 1.2rem;">Cargando...</h2>
+        <div id="options-list"></div>
+    </div>
+
+    <!-- Pantalla de Resultados -->
+    <div id="end-screen" class="screen">
+        <div style="font-size: 4rem; margin-bottom: 15px;">🏆</div>
+        <h1>¡Evaluación Finalizada!</h1>
+        <p id="result-message"></p>
+        <div style="font-size: 3.5rem; font-weight: 800; color: var(--primary-dark); margin-bottom: 10px;" id="final-score">0</div>
+        <p id="accuracy-text" style="margin-bottom: 25px; font-weight: bold;"></p>
+        
+        <button class="btn" onclick="downloadResults()">💾 Descargar Certificado de Nota</button>
+        <p style="color: #94a3b8; font-size: 0.85rem;">Guarda este archivo para entregárselo a tu profesor.</p>
+    </div>
+</div>
+
+<script>
+    // Preguntas por defecto
+    let questions = [
+        { q: "¿Qué se entiende por competencia digital?", options: ["Capacidad de usar tecnología de forma segura y crítica", "Solo saber usar redes sociales", "Saber programar exclusivamente", "Usar dispositivos electrónicos sin límites"], answer: 0 },
+        { q: "¿Qué es la alfabetización digital?", options: ["Habilidad para leer libros digitales", "Capacidad de buscar y evaluar información online", "Solo saber usar un ordenador", "Conocer redes sociales"], answer: 1 },
+        { q: "¿Qué es la identidad digital?", options: ["Un documento oficial online", "La imagen que proyectas en internet", "Tu correo electrónico", "Tu contraseña"], answer: 1 },
+        { q: "¿Qué es la ciberseguridad?", options: ["Uso de antivirus únicamente", "Protección de datos y sistemas digitales", "Navegar por internet", "Compartir información online"], answer: 1 },
+        { q: "¿Qué es el phishing?", options: ["Un virus informático", "Un juego online", "Un intento de robo de datos mediante engaño", "Un tipo de red social"], answer: 2 },
+        { q: "¿Qué implica el uso responsable de redes sociales?", options: ["Publicar todo sin pensar", "Compartir solo contenido viral", "Respetar y proteger la privacidad", "Borrar todas las cuentas"], answer: 2 },
+        { q: "¿Qué es la huella digital?", options: ["La marca del dedo en el móvil", "El rastro que dejas en internet", "Un tipo de contraseña", "Una app de seguridad"], answer: 1 },
+        { q: "¿Qué es el pensamiento crítico digital?", options: ["Creer todo lo que se lee online", "Analizar la información en internet", "Solo buscar información", "Compartir noticias"], answer: 1 },
+        { q: "¿Qué son las licencias Creative Commons?", options: ["Software gratuito", "Licencias para compartir contenido con condiciones", "Redes sociales", "Programas de pago"], answer: 1 },
+        { q: "¿Por qué actualizar el software?", options: ["Para gastar más datos", "Para mejorar seguridad y funcionamiento", "Porque es obligatorio siempre", "Para cambiar el diseño"], answer: 1 }
+    ];
+
+    let currentIdx = 0;
+    let score = 0;
+    let correctCount = 0;
+    let timer;
+    let timeLeft = 15;
+    let playerName = "";
+    let canAnswer = true;
+
+    // Función "secreta" para abrir el panel
+    function toggleProfesorPanel() {
+        const panel = document.getElementById('profesor-panel');
+        panel.style.display = (panel.style.display === 'block') ? 'none' : 'block';
+    }
+
+    // Lógica para cargar el CSV (Modificada para detectar comas automáticamente)
+    document.getElementById('file-input').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const content = e.target.result;
+            const lines = content.split(/\r?\n/);
+            const newQuestions = [];
+
+            // Detectar separador (tu CSV usa comas)
+            const separator = content.includes(';') ? ';' : ',';
+
+            lines.forEach((line, index) => {
+                if (index === 0 && line.toLowerCase().includes("pregunta")) return; // Saltar cabecera
+                if (line.trim() === "") return;
+                
+                const parts = line.split(separator);
+                if (parts.length >= 6) {
+                    const ans = parseInt(parts[5].trim());
+                    if (!isNaN(ans)) {
+                        newQuestions.push({
+                            q: parts[0].trim().replace(/^"|"$/g, ''),
+                            options: [
+                                parts[1].trim().replace(/^"|"$/g, ''), 
+                                parts[2].trim().replace(/^"|"$/g, ''), 
+                                parts[3].trim().replace(/^"|"$/g, ''), 
+                                parts[4].trim().replace(/^"|"$/g, '')
+                            ],
+                            answer: ans
+                        });
+                    }
+                }
+            });
+
+            if (newQuestions.length > 0) {
+                questions = newQuestions;
+                document.getElementById('status-text').innerHTML = `<span style="color:var(--success)">✅ ¡Cargadas ${questions.length} preguntas!</span>`;
+                alert(`Profesor: Se han actualizado correctamente las preguntas.`);
+                toggleProfesorPanel(); // Cerrar panel tras carga
+            }
+        };
+        reader.readAsText(file);
+    });
+
+    function checkStart() {
+        playerName = document.getElementById('player-name').value.trim();
+        if (playerName.length < 3) {
+            alert("Por favor, introduce tu nombre completo.");
+            return;
+        }
+        startGame();
+    }
+
+    function startGame() {
+        document.getElementById('start-screen').classList.remove('active');
+        document.getElementById('game-screen').classList.add('active');
+        loadQuestion();
+    }
+
+    function loadQuestion() {
+        canAnswer = true;
+        const q = questions[currentIdx];
+        document.getElementById('question-text').innerText = q.q;
+        const optionsDiv = document.getElementById('options-list');
+        optionsDiv.innerHTML = '';
+        
+        q.options.forEach((opt, i) => {
+            const div = document.createElement('div');
+            div.className = 'option';
+            div.innerText = opt;
+            div.onclick = () => checkAnswer(i, div);
+            optionsDiv.appendChild(div);
+        });
+
+        document.getElementById('progress-fill').style.width = ((currentIdx / questions.length) * 100) + '%';
+        startTimer();
+    }
+
+    function startTimer() {
+        clearInterval(timer);
+        timeLeft = 15;
+        document.getElementById('timer-val').innerText = timeLeft;
+        timer = setInterval(() => {
+            timeLeft--;
+            document.getElementById('timer-val').innerText = timeLeft;
+            if (timeLeft <= 0) checkAnswer(-1);
+        }, 1000);
+    }
+
+    function checkAnswer(idx, el) {
+        if (!canAnswer) return;
+        canAnswer = false;
+        clearInterval(timer);
+
+        const correct = questions[currentIdx].answer;
+        const options = document.querySelectorAll('.option');
+
+        if (idx === correct) {
+            if(el) el.classList.add('correct');
+            score += 100 + (timeLeft * 10);
+            correctCount++;
+        } else {
+            if (el) el.classList.add('wrong');
+            if (options[correct]) options[correct].classList.add('correct');
+        }
+
+        document.getElementById('score-val').innerText = score;
+
+        setTimeout(() => {
+            currentIdx++;
+            if (currentIdx < questions.length) loadQuestion();
+            else finishGame();
+        }, 1500);
+    }
+
+    function finishGame() {
+        document.getElementById('game-screen').classList.remove('active');
+        document.getElementById('end-screen').classList.add('active');
+        document.getElementById('final-score').innerText = score;
+        document.getElementById('result-message').innerText = `¡Certificación completada para ${playerName}!`;
+        document.getElementById('accuracy-text').innerText = `Resultado: ${correctCount} aciertos de ${questions.length}`;
+    }
+
+    function downloadResults() {
+        const date = new Date().toLocaleString();
+        const text = `CERTIFICADO DE COMPETENCIAS DIGITALES\nALUMNO: ${playerName.toUpperCase()}\nFECHA: ${date}\n\nRESULTADOS:\n- Aciertos: ${correctCount} de ${questions.length}\n- Puntuación: ${score} puntos`;
+        const blob = new Blob([text], { type: 'text/plain' });
+        const anchor = document.createElement('a');
+        anchor.download = `Nota_${playerName.replace(/\s/g, '_')}.txt`;
+        anchor.href = window.URL.createObjectURL(blob);
+        anchor.click();
+    }
+</script>
+
+</body>
+</html>
